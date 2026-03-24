@@ -44,7 +44,7 @@ func (r *NotificationRepo) CreateBatch(ctx context.Context, notifications []*dom
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	batch := &pgx.Batch{}
 	for _, n := range notifications {
@@ -65,11 +65,11 @@ func (r *NotificationRepo) CreateBatch(ctx context.Context, notifications []*dom
 	br := tx.SendBatch(ctx, batch)
 	for range notifications {
 		if _, err := br.Exec(); err != nil {
-			br.Close()
+			_ = br.Close()
 			return err
 		}
 	}
-	br.Close()
+	_ = br.Close()
 
 	return tx.Commit(ctx)
 }

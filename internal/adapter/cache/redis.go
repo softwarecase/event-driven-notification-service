@@ -28,7 +28,14 @@ func (c *RedisCache) Set(ctx context.Context, key string, value string, ttl time
 }
 
 func (c *RedisCache) SetNX(ctx context.Context, key string, value string, ttl time.Duration) (bool, error) {
-	return c.client.SetNX(ctx, key, value, ttl).Result()
+	res, err := c.client.SetArgs(ctx, key, value, redis.SetArgs{
+		TTL: ttl,
+		Mode: "NX",
+	}).Result()
+	if err == redis.Nil {
+		return false, nil
+	}
+	return res == "OK", err
 }
 
 func (c *RedisCache) Delete(ctx context.Context, key string) error {

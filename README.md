@@ -69,197 +69,6 @@ The system follows **Hexagonal Architecture (Ports & Adapters)** with two separa
 └── .github/workflows/    # CI/CD pipeline
 ```
 
-## Quick Start
-
-### Prerequisites
-- Docker & Docker Compose
-- Go 1.26+ (for local development only)
-
-### 1. Configure
-
-```bash
-cd deployments
-cp .env.example .env
-```
-
-Edit `.env` and set your webhook URL:
-- **For real testing**: Get a URL at [webhook.site](https://webhook.site) and paste it
-- **For load testing**: Use `http://mockprovider` (included in Docker Compose)
-
-### 2. Start
-
-```bash
-docker compose up -d
-```
-
-This single command starts all services: PostgreSQL 18, Redis 8.0, Jaeger, database migrations, API server, Worker, and a mock provider.
-
-### 3. Verify
-
-```bash
-# Health check (should return {"status":"healthy","postgres":"up","redis":"up"})
-curl http://localhost:8080/health | jq .
-
-# Send your first notification (order confirmation)
-curl -X POST http://localhost:8080/api/v1/notifications \
-  -H "Content-Type: application/json" \
-  -d '{
-    "channel": "sms",
-    "recipient": "+905551234567",
-    "content": "Your order #ORD-78432 has been confirmed! Estimated delivery: Mar 27.",
-    "priority": "high"
-  }' | jq .
-```
-
-### Distributed Tracing
-| Service | URL | Purpose |
-|---------|-----|---------|
-| Jaeger | http://localhost:16686 | Distributed tracing UI |
-
-## API Documentation
-
-Full OpenAPI 3.0 specification is available at [`api/openapi.yaml`](api/openapi.yaml).
-
-### Endpoints Overview
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/health` | Health check (Postgres + Redis) |
-| `GET` | `/metrics` | Real-time delivery metrics |
-| `GET` | `/ws/notifications` | WebSocket for live status updates |
-| `POST` | `/api/v1/notifications` | Create a notification |
-| `POST` | `/api/v1/notifications/batch` | Create up to 1000 notifications |
-| `GET` | `/api/v1/notifications` | List with filtering & pagination |
-| `GET` | `/api/v1/notifications/{id}` | Get notification by ID |
-| `PATCH` | `/api/v1/notifications/{id}/cancel` | Cancel a pending notification |
-| `GET` | `/api/v1/notifications/batch/{batchId}` | Get all notifications in a batch |
-| `PATCH` | `/api/v1/notifications/batch/{batchId}/cancel` | Cancel entire batch |
-| `POST` | `/api/v1/templates` | Create a message template |
-| `GET` | `/api/v1/templates` | List templates |
-| `GET` | `/api/v1/templates/{id}` | Get template by ID |
-| `PUT` | `/api/v1/templates/{id}` | Update template |
-| `DELETE` | `/api/v1/templates/{id}` | Soft-delete template |
-| `POST` | `/api/v1/templates/{id}/preview` | Preview rendered template |
-
-### API Examples
-
-**Create a notification (order confirmation via SMS):**
-```bash
-curl -X POST http://localhost:8080/api/v1/notifications \
-  -H "Content-Type: application/json" \
-  -d '{
-    "channel": "sms",
-    "recipient": "+905551234567",
-    "content": "Your order #ORD-78432 has been confirmed! Estimated delivery: Mar 27. Track at shop.example.com/track/78432",
-    "priority": "high"
-  }'
-```
-
-**Schedule a flash sale announcement:**
-```bash
-curl -X POST http://localhost:8080/api/v1/notifications \
-  -H "Content-Type: application/json" \
-  -d '{
-    "channel": "sms",
-    "recipient": "+905559999999",
-    "content": "FLASH SALE starts NOW! 60% off all items for the next 2 hours. Shop now: shop.example.com/flash-sale",
-    "priority": "high",
-    "scheduled_at": "2026-03-25T09:00:00Z"
-  }'
-```
-
-**Batch send (Spring Sale campaign):**
-```bash
-curl -X POST http://localhost:8080/api/v1/notifications/batch \
-  -H "Content-Type: application/json" \
-  -d '{
-    "notifications": [
-      {"channel": "sms", "recipient": "+905551111111", "content": "Spring Sale! 40% off all electronics. Use code SPRING40.", "priority": "high"},
-      {"channel": "email", "recipient": "vip@example.com", "content": "Exclusive VIP Early Access: Spring Collection is here.", "priority": "high"},
-      {"channel": "push", "recipient": "device-token-42", "content": "Price drop alert! Your wishlist item is now 30% off.", "priority": "normal"}
-    ]
-  }'
-```
-
-**Idempotent send (prevents duplicate order confirmations):**
-```bash
-curl -X POST http://localhost:8080/api/v1/notifications \
-  -H "Content-Type: application/json" \
-  -H "X-Idempotency-Key: order-ORD-44510-confirm" \
-  -d '{
-    "channel": "sms",
-    "recipient": "+905551234567",
-    "content": "Your order #ORD-44510 has been confirmed. Total: $89.99. Thank you for shopping with us!",
-    "idempotency_key": "order-ORD-44510-confirm"
-  }'
-```
-
-**List with filters:**
-```bash
-curl "http://localhost:8080/api/v1/notifications?status=delivered&channel=sms&page=1&page_size=10"
-```
-
-**Cancel a notification:**
-```bash
-curl -X PATCH http://localhost:8080/api/v1/notifications/{id}/cancel
-```
-
-**Create and use a template (order confirmation):**
-```bash
-# Create template
-curl -X POST http://localhost:8080/api/v1/templates \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "order_confirmation",
-    "channel": "email",
-    "subject": "Order #{{.order_id}} confirmed - {{.customer_name}}!",
-    "content": "Hi {{.customer_name}}, thank you for your order #{{.order_id}}! Total: ${{.total}}. Estimated delivery: {{.delivery_date}}.",
-    "variables": [
-      {"name": "customer_name", "required": true},
-      {"name": "order_id", "required": true},
-      {"name": "total", "required": true},
-      {"name": "delivery_date", "required": false, "default_value": "3-5 business days"}
-    ]
-  }'
-
-# Send notification using template
-curl -X POST http://localhost:8080/api/v1/notifications \
-  -H "Content-Type: application/json" \
-  -d '{
-    "channel": "email",
-    "recipient": "john.doe@example.com",
-    "template_id": "TEMPLATE_ID_HERE",
-    "template_vars": {"customer_name": "John Doe", "order_id": "ORD-99201", "total": "149.99", "delivery_date": "March 28, 2026"},
-    "priority": "high"
-  }'
-```
-
-**WebSocket real-time updates:**
-```javascript
-const ws = new WebSocket('ws://localhost:8080/ws/notifications');
-ws.onmessage = (e) => {
-  const event = JSON.parse(e.data);
-  console.log(`${event.notification_id}: ${event.status}`);
-  // Output: "abc-123: queued" → "abc-123: processing" → "abc-123: delivered"
-};
-```
-
-**Metrics:**
-```bash
-curl http://localhost:8080/metrics | jq .
-```
-```json
-{
-  "queue_depth": {"sms": 0, "email": 0, "push": 0},
-  "delivered": 1523,
-  "failed": 12,
-  "total_processed": 1535,
-  "avg_latency_ms": 0.45,
-  "circuit_breakers": {},
-  "timestamp": "2026-03-24T18:00:00Z"
-}
-```
-
 ## Features
 
 ### Notification Management API
@@ -472,7 +281,196 @@ score = priority_weight × 10^13 + creation_timestamp
 
 Within the same priority level, messages are processed in FIFO order (first created, first sent). The dequeue operation is atomic via a Lua script, preventing two workers from grabbing the same message.
 
+## Quick Start
 
+### Prerequisites
+- Docker & Docker Compose
+- Go 1.26+ (for local development only)
+
+### 1. Configure
+
+```bash
+cd deployments
+cp .env.example .env
+```
+
+Edit `.env` and set your webhook URL:
+- **For real testing**: Get a URL at [webhook.site](https://webhook.site) and paste it
+- **For load testing**: Use `http://mockprovider` (included in Docker Compose)
+
+### 2. Start
+
+```bash
+docker compose up -d
+```
+
+This single command starts all services: PostgreSQL 18, Redis 8.0, Jaeger, database migrations, API server, Worker, and a mock provider.
+
+### 3. Verify
+
+```bash
+# Health check (should return {"status":"healthy","postgres":"up","redis":"up"})
+curl http://localhost:8080/health | jq .
+
+# Send your first notification (order confirmation)
+curl -X POST http://localhost:8080/api/v1/notifications \
+  -H "Content-Type: application/json" \
+  -d '{
+    "channel": "sms",
+    "recipient": "+905551234567",
+    "content": "Your order #ORD-78432 has been confirmed! Estimated delivery: Mar 27.",
+    "priority": "high"
+  }' | jq .
+```
+
+### Distributed Tracing
+| Service | URL | Purpose |
+|---------|-----|---------|
+| Jaeger | http://localhost:16686 | Distributed tracing UI |
+
+## API Documentation
+
+Full OpenAPI 3.0 specification is available at [`api/openapi.yaml`](api/openapi.yaml).
+
+### Endpoints Overview
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/health` | Health check (Postgres + Redis) |
+| `GET` | `/metrics` | Real-time delivery metrics |
+| `GET` | `/ws/notifications` | WebSocket for live status updates |
+| `POST` | `/api/v1/notifications` | Create a notification |
+| `POST` | `/api/v1/notifications/batch` | Create up to 1000 notifications |
+| `GET` | `/api/v1/notifications` | List with filtering & pagination |
+| `GET` | `/api/v1/notifications/{id}` | Get notification by ID |
+| `PATCH` | `/api/v1/notifications/{id}/cancel` | Cancel a pending notification |
+| `GET` | `/api/v1/notifications/batch/{batchId}` | Get all notifications in a batch |
+| `PATCH` | `/api/v1/notifications/batch/{batchId}/cancel` | Cancel entire batch |
+| `POST` | `/api/v1/templates` | Create a message template |
+| `GET` | `/api/v1/templates` | List templates |
+| `GET` | `/api/v1/templates/{id}` | Get template by ID |
+| `PUT` | `/api/v1/templates/{id}` | Update template |
+| `DELETE` | `/api/v1/templates/{id}` | Soft-delete template |
+| `POST` | `/api/v1/templates/{id}/preview` | Preview rendered template |
+
+### API Examples
+
+**Create a notification (order confirmation via SMS):**
+```bash
+curl -X POST http://localhost:8080/api/v1/notifications \
+  -H "Content-Type: application/json" \
+  -d '{
+    "channel": "sms",
+    "recipient": "+905551234567",
+    "content": "Your order #ORD-78432 has been confirmed! Estimated delivery: Mar 27. Track at shop.example.com/track/78432",
+    "priority": "high"
+  }'
+```
+
+**Schedule a flash sale announcement:**
+```bash
+curl -X POST http://localhost:8080/api/v1/notifications \
+  -H "Content-Type: application/json" \
+  -d '{
+    "channel": "sms",
+    "recipient": "+905559999999",
+    "content": "FLASH SALE starts NOW! 60% off all items for the next 2 hours. Shop now: shop.example.com/flash-sale",
+    "priority": "high",
+    "scheduled_at": "2026-03-25T09:00:00Z"
+  }'
+```
+
+**Batch send (Spring Sale campaign):**
+```bash
+curl -X POST http://localhost:8080/api/v1/notifications/batch \
+  -H "Content-Type: application/json" \
+  -d '{
+    "notifications": [
+      {"channel": "sms", "recipient": "+905551111111", "content": "Spring Sale! 40% off all electronics. Use code SPRING40.", "priority": "high"},
+      {"channel": "email", "recipient": "vip@example.com", "content": "Exclusive VIP Early Access: Spring Collection is here.", "priority": "high"},
+      {"channel": "push", "recipient": "device-token-42", "content": "Price drop alert! Your wishlist item is now 30% off.", "priority": "normal"}
+    ]
+  }'
+```
+
+**Idempotent send (prevents duplicate order confirmations):**
+```bash
+curl -X POST http://localhost:8080/api/v1/notifications \
+  -H "Content-Type: application/json" \
+  -H "X-Idempotency-Key: order-ORD-44510-confirm" \
+  -d '{
+    "channel": "sms",
+    "recipient": "+905551234567",
+    "content": "Your order #ORD-44510 has been confirmed. Total: $89.99. Thank you for shopping with us!",
+    "idempotency_key": "order-ORD-44510-confirm"
+  }'
+```
+
+**List with filters:**
+```bash
+curl "http://localhost:8080/api/v1/notifications?status=delivered&channel=sms&page=1&page_size=10"
+```
+
+**Cancel a notification:**
+```bash
+curl -X PATCH http://localhost:8080/api/v1/notifications/{id}/cancel
+```
+
+**Create and use a template (order confirmation):**
+```bash
+# Create template
+curl -X POST http://localhost:8080/api/v1/templates \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "order_confirmation",
+    "channel": "email",
+    "subject": "Order #{{.order_id}} confirmed - {{.customer_name}}!",
+    "content": "Hi {{.customer_name}}, thank you for your order #{{.order_id}}! Total: ${{.total}}. Estimated delivery: {{.delivery_date}}.",
+    "variables": [
+      {"name": "customer_name", "required": true},
+      {"name": "order_id", "required": true},
+      {"name": "total", "required": true},
+      {"name": "delivery_date", "required": false, "default_value": "3-5 business days"}
+    ]
+  }'
+
+# Send notification using template
+curl -X POST http://localhost:8080/api/v1/notifications \
+  -H "Content-Type: application/json" \
+  -d '{
+    "channel": "email",
+    "recipient": "john.doe@example.com",
+    "template_id": "TEMPLATE_ID_HERE",
+    "template_vars": {"customer_name": "John Doe", "order_id": "ORD-99201", "total": "149.99", "delivery_date": "March 28, 2026"},
+    "priority": "high"
+  }'
+```
+
+**WebSocket real-time updates:**
+```javascript
+const ws = new WebSocket('ws://localhost:8080/ws/notifications');
+ws.onmessage = (e) => {
+  const event = JSON.parse(e.data);
+  console.log(`${event.notification_id}: ${event.status}`);
+  // Output: "abc-123: queued" → "abc-123: processing" → "abc-123: delivered"
+};
+```
+
+**Metrics:**
+```bash
+curl http://localhost:8080/metrics | jq .
+```
+```json
+{
+  "queue_depth": {"sms": 0, "email": 0, "push": 0},
+  "delivered": 1523,
+  "failed": 12,
+  "total_processed": 1535,
+  "avg_latency_ms": 0.45,
+  "circuit_breakers": {},
+  "timestamp": "2026-03-24T18:00:00Z"
+}
+```
 
 ## Configuration
 

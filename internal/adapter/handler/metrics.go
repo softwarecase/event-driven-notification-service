@@ -33,7 +33,7 @@ func (m *MetricsCollector) RecordDelivery(latencyMs int64) {
 	pipe.Incr(ctx, metricsKeyDelivered)
 	pipe.IncrBy(ctx, metricsKeyLatencySum, latencyMs)
 	pipe.Incr(ctx, metricsKeyProcessed)
-	pipe.Exec(ctx)
+	_, _ = pipe.Exec(ctx)
 }
 
 func (m *MetricsCollector) RecordFailure() {
@@ -41,7 +41,7 @@ func (m *MetricsCollector) RecordFailure() {
 	pipe := m.client.Pipeline()
 	pipe.Incr(ctx, metricsKeyFailed)
 	pipe.Incr(ctx, metricsKeyProcessed)
-	pipe.Exec(ctx)
+	_, _ = pipe.Exec(ctx)
 }
 
 type MetricsHandler struct {

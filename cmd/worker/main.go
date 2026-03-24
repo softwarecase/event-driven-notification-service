@@ -48,7 +48,7 @@ func main() {
 		if err != nil {
 			logger.Warn("failed to init tracer", "error", err)
 		} else {
-			defer tp.Shutdown(ctx)
+			defer func() { _ = tp.Shutdown(ctx) }()
 		}
 	}
 
@@ -67,7 +67,7 @@ func main() {
 		Password: cfg.Redis.Password,
 		DB:       cfg.Redis.DB,
 	})
-	defer redisClient.Close()
+	defer func() { _ = redisClient.Close() }()
 	logger.Info("connected to redis")
 
 	// Adapters

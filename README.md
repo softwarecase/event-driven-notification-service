@@ -65,7 +65,7 @@ The system follows **Hexagonal Architecture (Ports & Adapters)** with two separa
 │   └── ratelimit/        # Sliding window rate limiter (Redis + Lua)
 ├── api/                  # OpenAPI 3.0 specification
 ├── deployments/          # Docker Compose, Dockerfiles, nginx config
-├── scripts/              # Database seed data
+├── scripts/              # Integration test scenarios
 └── .github/workflows/    # CI/CD pipeline
 ```
 

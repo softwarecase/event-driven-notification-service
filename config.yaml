@@ -1,0 +1,36 @@
+server:
+  port: 8080
+  read_timeout: 15s
+  write_timeout: 15s
+  shutdown_timeout: 30s
+
+database:
+  host: localhost
+  port: 5432
+  user: postgres
+  password: postgres
+  name: notifications
+  ssl_mode: disable
+  max_conns: 25
+
+redis:
+  addr: localhost:6379
+  password: ""
+  db: 0
+
+provider:
+  webhook_url: https://webhook.site/f531bc98-da07-40a2-96ec-561231919fbe
+  timeout: 10s
+
+worker:
+  concurrency: 5
+  poll_interval: 100ms
+  rate_limit_per_sec: 100
+  max_retries: 3
+  retry_base_delay: 1s
+  retry_max_delay: 5m
+  scheduler_interval: 5s
+
+tracing:
+  enabled: true
+  endpoint: localhost:4318

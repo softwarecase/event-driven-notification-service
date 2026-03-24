@@ -24,9 +24,19 @@ profile.cov
 go.work
 go.work.sum
 
-# env file
+# env files
 .env
+deployments/.env
 
 # Editor/IDE
-# .idea/
-# .vscode/
+.idea/
+.vscode/
+
+# Build output
+bin/
+
+# Local config overrides (config.yaml is committed with safe defaults)
+config.local.yaml
+
+#files
+*.pdf

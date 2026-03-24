@@ -1,0 +1,589 @@
+openapi: 3.0.3
+info:
+  title: Event-Driven Notification Service
+  description: Scalable notification system that processes and delivers messages through SMS, Email, and Push channels
+  version: 1.0.0
+  contact:
+    name: API Support
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      tags: [System]
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: Service is unhealthy
+
+  /metrics:
+    get:
+      summary: Real-time metrics
+      tags: [System]
+      responses:
+        '200':
+          description: Current system metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricsResponse'
+
+  /ws/notifications:
+    get:
+      summary: WebSocket for real-time status updates
+      tags: [System]
+      parameters:
+        - name: batch_id
+          in: query
+          description: Filter events by batch ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '101':
+          description: WebSocket connection established
+
+  /api/v1/notifications:
+    post:
+      summary: Create a notification
+      tags: [Notifications]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateNotificationRequest'
+      responses:
+        '202':
+          description: Notification accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notification'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    get:
+      summary: List notifications with filtering and pagination
+      tags: [Notifications]
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, scheduled, queued, processing, delivered, failed, cancelled]
+        - name: channel
+          in: query
+          schema:
+            type: string
+            enum: [sms, email, push]
+        - name: batch_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          description: Filter by created_at >= (ISO8601)
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: Filter by created_at <= (ISO8601)
+          schema:
+            type: string
+            format: date-time
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        '200':
+          description: Paginated list of notifications
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedNotifications'
+
+  /api/v1/notifications/{id}:
+    get:
+      summary: Get notification by ID
+      tags: [Notifications]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Notification details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notification'
+        '404':
+          description: Not found
+
+  /api/v1/notifications/{id}/cancel:
+    patch:
+      summary: Cancel a pending notification
+      tags: [Notifications]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Notification cancelled
+        '404':
+          description: Not found
+        '409':
+          description: Cannot cancel (already processed)
+
+  /api/v1/notifications/batch:
+    post:
+      summary: Create batch notifications (up to 1000)
+      tags: [Notifications]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [notifications]
+              properties:
+                notifications:
+                  type: array
+                  maxItems: 1000
+                  items:
+                    $ref: '#/components/schemas/CreateNotificationRequest'
+      responses:
+        '202':
+          description: Batch accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchResult'
+
+  /api/v1/notifications/batch/{batchId}:
+    get:
+      summary: Get all notifications in a batch
+      tags: [Notifications]
+      parameters:
+        - name: batchId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Batch notifications
+
+  /api/v1/notifications/batch/{batchId}/cancel:
+    patch:
+      summary: Cancel all pending notifications in a batch
+      tags: [Notifications]
+      parameters:
+        - name: batchId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Batch cancelled
+
+  /api/v1/templates:
+    post:
+      summary: Create a message template
+      tags: [Templates]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTemplateRequest'
+      responses:
+        '201':
+          description: Template created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Template'
+
+    get:
+      summary: List templates
+      tags: [Templates]
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Paginated list of templates
+
+  /api/v1/templates/{id}:
+    get:
+      summary: Get template by ID
+      tags: [Templates]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Template details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Template'
+
+    put:
+      summary: Update template
+      tags: [Templates]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTemplateRequest'
+      responses:
+        '200':
+          description: Template updated
+
+    delete:
+      summary: Soft-delete template
+      tags: [Templates]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Template deleted
+
+  /api/v1/templates/{id}/preview:
+    post:
+      summary: Preview rendered template
+      tags: [Templates]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                variables:
+                  type: object
+                  additionalProperties: true
+      responses:
+        '200':
+          description: Rendered preview
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  subject:
+                    type: string
+                  content:
+                    type: string
+
+components:
+  schemas:
+    CreateNotificationRequest:
+      type: object
+      required: [channel, recipient]
+      properties:
+        channel:
+          type: string
+          enum: [sms, email, push]
+        recipient:
+          type: string
+          description: Phone number, email address, or device token
+        subject:
+          type: string
+          description: Required for email channel
+        content:
+          type: string
+          description: Message content (required if template_id not provided)
+        priority:
+          type: string
+          enum: [high, normal, low]
+          default: normal
+        scheduled_at:
+          type: string
+          format: date-time
+          description: Schedule for future delivery (ISO8601)
+        template_id:
+          type: string
+          format: uuid
+          description: Use a template instead of raw content
+        template_vars:
+          type: object
+          additionalProperties: true
+          description: Variables for template rendering
+        idempotency_key:
+          type: string
+          description: Unique key to prevent duplicate sends
+        metadata:
+          type: object
+          additionalProperties: true
+
+    Notification:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        batch_id:
+          type: string
+          format: uuid
+        channel:
+          type: string
+        recipient:
+          type: string
+        subject:
+          type: string
+        content:
+          type: string
+        priority:
+          type: integer
+        status:
+          type: string
+          enum: [pending, scheduled, queued, processing, delivered, failed, cancelled]
+        scheduled_at:
+          type: string
+          format: date-time
+        sent_at:
+          type: string
+          format: date-time
+        retry_count:
+          type: integer
+        error_message:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    BatchResult:
+      type: object
+      properties:
+        batch_id:
+          type: string
+          format: uuid
+        total:
+          type: integer
+        accepted:
+          type: integer
+        rejected:
+          type: integer
+        notification_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              index:
+                type: integer
+              message:
+                type: string
+
+    PaginatedNotifications:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Notification'
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total:
+          type: integer
+        total_pages:
+          type: integer
+
+    CreateTemplateRequest:
+      type: object
+      required: [name, channel, content]
+      properties:
+        name:
+          type: string
+        channel:
+          type: string
+          enum: [sms, email, push]
+        subject:
+          type: string
+        content:
+          type: string
+          description: Go template syntax with {{.VarName}}
+        variables:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              required:
+                type: boolean
+              default:
+                type: string
+
+    UpdateTemplateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        channel:
+          type: string
+          enum: [sms, email, push]
+        subject:
+          type: string
+        content:
+          type: string
+        variables:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              required:
+                type: boolean
+              default:
+                type: string
+
+    Template:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        channel:
+          type: string
+        subject:
+          type: string
+        content:
+          type: string
+        variables:
+          type: array
+          items:
+            type: object
+        active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy]
+        postgres:
+          type: string
+          enum: [up, down]
+        redis:
+          type: string
+          enum: [up, down]
+
+    MetricsResponse:
+      type: object
+      properties:
+        queue_depth:
+          type: object
+          additionalProperties:
+            type: integer
+        delivered:
+          type: integer
+        failed:
+          type: integer
+        total_processed:
+          type: integer
+        avg_latency_ms:
+          type: number
+        circuit_breakers:
+          type: object
+          additionalProperties:
+            type: string
+        timestamp:
+          type: string
+          format: date-time
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        details:
+          type: string
